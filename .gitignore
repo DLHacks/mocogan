@@ -1,0 +1,7 @@
+*.log
+/samples
+/.ipynb_checkpoints/
+/__pycache__/
+/raw_data/
+/resized_data/
+/test.ipynb
