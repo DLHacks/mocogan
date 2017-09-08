@@ -15,7 +15,6 @@
 ## References
 
 - L.Gorelick,M.Blank,E.Shechtman,M.Irani,andR.Basri.
-Actions as space-time shapes. PAMI, 29(12):2247–2253,
-2007. http://www.wisdom.weizmann.ac.il/%7Evision/SpaceTimeActions.html (datasets)
+Actions as space-time shapes. PAMI, 29(12):2247–2253, 2007. http://www.wisdom.weizmann.ac.il/%7Evision/SpaceTimeActions.html (datasets)
 - https://github.com/pytorch/examples/tree/master/dcgan (partly using their model architecture)) 
 
