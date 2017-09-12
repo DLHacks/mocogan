@@ -1,6 +1,5 @@
 # coding: utf-8
 
-
 import os
 import glob
 import time
@@ -95,6 +94,21 @@ def timeSince(since):
     s = s - m*60 - h*(60**2) - d*((60**2)*24)
     return '%dd %dh %dm %ds' % (d, h, m, s)
 
+trained_path = os.path.join(current_path, 'trained_models')
+def checkpoint(model, optimizer, epoch):
+    filename = os.path.join(trained_path, '%s_epoch-%d' % (model.__class__.__name__, epoch))
+    # modelの状態保存
+    torch.save(model.state_dict(), filename + '.model')
+    # optimizerの状態保存
+    torch.save(optimizer.state_dict(), filename + '.state')
+
+def save_video(fake_video, epoch):
+    outputdata = fake_video * 255
+    outputdata = outputdata.astype(np.uint8)
+    dir_path = os.path.join(current_path, 'generated_videos')
+    file_path = os.path.join(dir_path, 'fakeVideo_epoch-%d.mp4' % epoch)
+    skvideo.io.vwrite(file_path, outputdata)
+
 
 ''' adjust to cuda '''
 
@@ -157,17 +171,17 @@ def gen_z(n_frames):
 
 ''' train models '''
 
-n_iter = 100
+n_iter = 250000
 start_time = time.time()
 
-for epoch in range(n_iter):
+for epoch in range(1, n_iter+1):
     ''' prepare real images '''
-    # real_video.size() => (batch_size, nc, T, img_size, img_size)
-    real_video = random_choice()
+    # real_videos.size() => (batch_size, nc, T, img_size, img_size)
+    real_videos = random_choice()
     if cuda == True:
-        real_video = real_video.cuda()
-    real_video = Variable(real_video)
-    real_img = real_video[:, :, np.random.randint(0, T), :, :]
+        real_videos = real_videos.cuda()
+    real_videos = Variable(real_videos)
+    real_img = real_videos[:, :, np.random.randint(0, T), :, :]
 
     ''' prepare fake images '''
     # note that n_frames is sampled from video length distribution
@@ -179,19 +193,19 @@ for epoch in range(n_iter):
 
     # gen videos
     Z = Z.contiguous().view(batch_size*T, nz, 1, 1)
-    fake_video = gen_i(Z)
-    fake_video = fake_video.view(batch_size, T, nc, img_size, img_size)
+    fake_videos = gen_i(Z)
+    fake_videos = fake_videos.view(batch_size, T, nc, img_size, img_size)
 
     # reshape => (batch_size, nc, T, img_size, img_size)
-    fake_video = fake_video.transpose(2, 1)
+    fake_videos = fake_videos.transpose(2, 1)
 
     # img sampling
-    fake_img = fake_video[:, :, np.random.randint(0, T), :, :]
+    fake_img = fake_videos[:, :, np.random.randint(0, T), :, :]
 
 
     ''' back prop for dis_v '''
-    err_Dv_real = bp_v(real_video, 0.9)
-    err_Dv_fake = bp_v(fake_video.detach(), 0) # detach(): avoid calc grad twice
+    err_Dv_real = bp_v(real_videos, 0.9)
+    err_Dv_fake = bp_v(fake_videos.detach(), 0) # detach(): avoid calc grad twice
     err_Dv = err_Dv_real + err_Dv_fake
 
     ''' back prop for dis_i '''
@@ -207,7 +221,7 @@ for epoch in range(n_iter):
     gen_i.zero_grad()
     gru.zero_grad()
     # calc grad using video. notice retain=True to back prop twice
-    err_Gv = bp_v(fake_video, 0.9, retain=True)
+    err_Gv = bp_v(fake_videos, 0.9, retain=True)
 
     ''' back prop for gen_i and gru using img '''
     # calc grad using images
@@ -217,6 +231,15 @@ for epoch in range(n_iter):
     optim_Gi.step()
     optim_GRU.step()
 
-    if (epoch+1) % 10 == 0:
+    if epoch % 100 == 0:
         print('[%d/%d] (%s) Loss_Di: %.4f Loss_Dv: %.4f Loss_Gi: %.4f Loss_Gv: %.4f'
-              % (epoch+1, n_iter, timeSince(start_time), err_Di, err_Dv, err_Gi, err_Gv))
+              % (epoch, n_iter, timeSince(start_time), err_Di, err_Dv, err_Gi, err_Gv))
+    
+    if epoch % 1000 == 0:
+        checkpoint(dis_i, optim_Di, epoch)
+        checkpoint(dis_v, optim_Dv, epoch)
+        checkpoint(gen_i, optim_Gi, epoch)
+        checkpoint(gru,   optim_GRU, epoch)
+
+    if epoch % 1000 == 0:
+        save_video(fake_videos[0].data.cpu().numpy().transpose(1, 2, 3, 0), epoch)

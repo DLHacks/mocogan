@@ -41,7 +41,6 @@ class Discriminator_I(nn.Module):
         return output.view(-1, 1).squeeze(1)
 
 
-# Discriminator_Iに時間方向の畳み込みを追加
 class Discriminator_V(nn.Module):
     def __init__(self, nc=3, ndf=64, T=16, ngpu=1):
         super(Discriminator_V, self).__init__()
@@ -128,8 +127,8 @@ class GRU(nn.Module):
 
     def forward(self, inputs):
         '''
-        gru_out.shape() =>  (seq_len, batch, hidden_size)
-        outputs,shape() => (seq_len, batch, output_size)
+        gru_out.shape() => (seq_len, batch, hidden_size)
+        outputs.shape() => (seq_len, batch, output_size)
         '''
         gru_out, self.hidden = self.gru(inputs, self.hidden)
         # 系列の要素ひとつずつに対して全結合を適用
