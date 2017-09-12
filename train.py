@@ -103,9 +103,9 @@ def timeSince(since):
     now = time.time()
     s = now - since
     d = math.floor(s / ((60**2)*24))
-    h = math.floor(s / (60**2)) - d*((60**2)*24)
-    m = math.floor(s / 60) - h*(60**2) - d*((60**2)*24)
-    s = s - m*60 - h*(60**2) - d*((60**2)*24)
+    h = math.floor(s / (60**2)) - d*24
+    m = math.floor(s / 60) - h*60 - d*24*60
+    s = s - m*60 - h*(60**2) - d*24*(60**2)
     return '%dd %dh %dm %ds' % (d, h, m, s)
 
 trained_path = os.path.join(current_path, 'trained_models')
