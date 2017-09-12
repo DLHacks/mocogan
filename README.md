@@ -1,4 +1,4 @@
-# [WIP]MoCoGAN: Decomposing Motion and Content for Video Generation
+# MoCoGAN: Decomposing Motion and Content for Video Generation
 
 - A pytorch implmention of MoCoGAN
 - authors: Sergey Tulyakov, Ming-Yu Liu, Xiaodong Yang, Jan Kautz
@@ -10,6 +10,7 @@
 
 - you need to place datasets([run, walk, skip, ......]) [here](http://www.wisdom.weizmann.ac.il/%7Evision/SpaceTimeActions.html)  under 'raw_data' dir.
 - `python resize.py`: resize your raw data as 96x96 and place them under the resized_data dir. This command requires ffmpeg
+- `python train.py`: train MoCoGAN.
 
 
 ## Requirements
