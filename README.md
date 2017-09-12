@@ -1,5 +1,9 @@
 # MoCoGAN: Decomposing Motion and Content for Video Generation
 
+- Powered by [DL HACKS](http://deeplearning.jp/hacks/)
+
+## Description
+
 - A pytorch implmention of MoCoGAN
 - authors: Sergey Tulyakov, Ming-Yu Liu, Xiaodong Yang, Jan Kautz
 - arxiv: https://arxiv.org/abs/1707.04993
