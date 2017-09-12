@@ -1,6 +1,7 @@
 # coding: utf-8
 
 import os
+import argparse
 import glob
 import time
 import math
@@ -12,10 +13,24 @@ from torch.autograd import Variable
 
 from models import Discriminator_I, Discriminator_V, Generator_I, GRU
 
+
+parser = argparse.ArgumentParser(description='Run hyperopt')
+parser.add_argument('--cuda', type=int, default=1,
+                     help='set -1 when you use cpu')
+parser.add_argument('--ngpu', type=int, default=1,
+                     help='set the number of gpu you use')
+parser.add_argument('--batch-size', type=int, default=16,
+                     help='set batch_size, default: 16')
+
+args       = parser.parse_args()
+cuda       = args.cuda
+ngpu       = args.ngpu
+batch_size = args.batch_size
+
+
 seed = 0
 torch.manual_seed(seed)
 np.random.seed(seed)
-cuda = True
 if cuda == True:
     torch.cuda.set_device(0)
 
@@ -33,7 +48,6 @@ videos = [ video.transpose(3, 0, 1, 2) / 255.0 for video in videos ]
 ''' prepare video sampling '''
 
 n_videos = len(videos)
-batch_size = 16
 T = 16
 
 # for true video
@@ -42,7 +56,7 @@ def trim(video):
     end = start + T
     return video[:, start:end, :, :]
 
-# for input noises to generate fake video 
+# for input noises to generate fake video
 # note that noises are trimmed randomly from n_frames to T for efficiency
 def trim_noise(noise):
     start = np.random.randint(0, noise.size(1) - (T+1))
@@ -75,10 +89,10 @@ d_M = 10
 nz  = d_C + d_M
 criterion = nn.BCELoss()
 
-dis_i = Discriminator_I(nc, ndf, ngpu=2)
-dis_v = Discriminator_V(nc, ndf, T=T, ngpu=2)
-gen_i = Generator_I(nc, ngf, nz, ngpu=2)
-gru = GRU(d_E, hidden_size, d_M)
+dis_i = Discriminator_I(nc, ndf, ngpu=ngpu)
+dis_v = Discriminator_V(nc, ndf, T=T, ngpu=ngpu)
+gen_i = Generator_I(nc, ngf, nz, ngpu=ngpu)
+gru = GRU(d_E, hidden_size, d_M, gpu=cuda)
 
 
 ''' prepare for train '''
@@ -97,9 +111,7 @@ def timeSince(since):
 trained_path = os.path.join(current_path, 'trained_models')
 def checkpoint(model, optimizer, epoch):
     filename = os.path.join(trained_path, '%s_epoch-%d' % (model.__class__.__name__, epoch))
-    # modelの状態保存
     torch.save(model.state_dict(), filename + '.model')
-    # optimizerの状態保存
     torch.save(optimizer.state_dict(), filename + '.state')
 
 def save_video(fake_video, epoch):
@@ -187,11 +199,11 @@ for epoch in range(1, n_iter+1):
     # note that n_frames is sampled from video length distribution
     n_frames = video_lengths[np.random.randint(0, n_videos)]
     Z = gen_z(n_frames)  # Z.size() => (batch_size, n_frames, nz, 1, 1)
-    
+
     # trim => (batch_size, T, nz, 1, 1)
     Z = trim_noise(Z)
 
-    # gen videos
+    # generate videos
     Z = Z.contiguous().view(batch_size*T, nz, 1, 1)
     fake_videos = gen_i(Z)
     fake_videos = fake_videos.view(batch_size, T, nc, img_size, img_size)
@@ -234,7 +246,7 @@ for epoch in range(1, n_iter+1):
     if epoch % 100 == 0:
         print('[%d/%d] (%s) Loss_Di: %.4f Loss_Dv: %.4f Loss_Gi: %.4f Loss_Gv: %.4f'
               % (epoch, n_iter, timeSince(start_time), err_Di, err_Dv, err_Gi, err_Gv))
-    
+
     if epoch % 1000 == 0:
         checkpoint(dis_i, optim_Di, epoch)
         checkpoint(dis_v, optim_Dv, epoch)
