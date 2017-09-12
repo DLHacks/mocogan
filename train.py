@@ -1,8 +1,10 @@
 # coding: utf-8
 
-
 import os
+import argparse
 import glob
+import time
+import math
 import skvideo.io
 import numpy as np
 import torch
@@ -11,12 +13,26 @@ from torch.autograd import Variable
 
 from models import Discriminator_I, Discriminator_V, Generator_I, GRU
 
+
+parser = argparse.ArgumentParser(description='Run hyperopt')
+parser.add_argument('--cuda', type=int, default=1,
+                     help='set -1 when you use cpu')
+parser.add_argument('--ngpu', type=int, default=1,
+                     help='set the number of gpu you use')
+parser.add_argument('--batch-size', type=int, default=16,
+                     help='set batch_size, default: 16')
+
+args       = parser.parse_args()
+cuda       = args.cuda
+ngpu       = args.ngpu
+batch_size = args.batch_size
+
+
 seed = 0
 torch.manual_seed(seed)
 np.random.seed(seed)
-gpu = True
-if gpu == True:
-    torch.cuda.set_device(2)
+if cuda == True:
+    torch.cuda.set_device(0)
 
 
 ''' prepare dataset '''
@@ -29,16 +45,23 @@ videos = [ skvideo.io.vread(file) for file in files ]
 videos = [ video.transpose(3, 0, 1, 2) / 255.0 for video in videos ]
 
 
-''' prepare true videos sampling '''
+''' prepare video sampling '''
 
 n_videos = len(videos)
-batch_size = 16
-n_frames = 32
+T = 16
 
+# for true video
 def trim(video):
-    start = np.random.randint(0, video.shape[1] - (n_frames+1))
-    end = start + n_frames
+    start = np.random.randint(0, video.shape[1] - (T+1))
+    end = start + T
     return video[:, start:end, :, :]
+
+# for input noises to generate fake video
+# note that noises are trimmed randomly from n_frames to T for efficiency
+def trim_noise(noise):
+    start = np.random.randint(0, noise.size(1) - (T+1))
+    end = start + T
+    return noise[:, start:end, :, :, :]
 
 def random_choice():
     X = []
@@ -49,33 +72,59 @@ def random_choice():
     X = torch.stack(X)
     return X
 
+# video length distribution
+video_lengths = [video.shape[1] for video in videos]
+
 
 ''' set models '''
 
 img_size = 96
 nc = 3
-ndf = 64 # dcganの実装より
+ndf = 64 # from dcgan
 ngf = 64
-d_E = 100 # 適当
-hidden_size = 50 # 適当
-d_C = 30
-d_M = 30
+d_E = 100 # guess
+hidden_size = 100 # guess
+d_C = 50
+d_M = 10
 nz  = d_C + d_M
 criterion = nn.BCELoss()
 
-dis_i = Discriminator_I(nc, ndf)
-dis_v = Discriminator_V(nc, ndf, T=n_frames)
-gen_i = Generator_I(nc, ngf, nz)
-gru = GRU(d_E, hidden_size, d_C)
+dis_i = Discriminator_I(nc, ndf, ngpu=ngpu)
+dis_v = Discriminator_V(nc, ndf, T=T, ngpu=ngpu)
+gen_i = Generator_I(nc, ngf, nz, ngpu=ngpu)
+gru = GRU(d_E, hidden_size, d_M, gpu=cuda)
+
 
 ''' prepare for train '''
 
 label = torch.FloatTensor()
 
+def timeSince(since):
+    now = time.time()
+    s = now - since
+    d = math.floor(s / ((60**2)*24))
+    h = math.floor(s / (60**2)) - d*((60**2)*24)
+    m = math.floor(s / 60) - h*(60**2) - d*((60**2)*24)
+    s = s - m*60 - h*(60**2) - d*((60**2)*24)
+    return '%dd %dh %dm %ds' % (d, h, m, s)
 
-''' adjust to GPU '''
+trained_path = os.path.join(current_path, 'trained_models')
+def checkpoint(model, optimizer, epoch):
+    filename = os.path.join(trained_path, '%s_epoch-%d' % (model.__class__.__name__, epoch))
+    torch.save(model.state_dict(), filename + '.model')
+    torch.save(optimizer.state_dict(), filename + '.state')
 
-if gpu == True:
+def save_video(fake_video, epoch):
+    outputdata = fake_video * 255
+    outputdata = outputdata.astype(np.uint8)
+    dir_path = os.path.join(current_path, 'generated_videos')
+    file_path = os.path.join(dir_path, 'fakeVideo_epoch-%d.mp4' % epoch)
+    skvideo.io.vwrite(file_path, outputdata)
+
+
+''' adjust to cuda '''
+
+if cuda == True:
     dis_i.cuda()
     dis_v.cuda()
     gen_i.cuda()
@@ -85,17 +134,18 @@ if gpu == True:
 
 
 # setup optimizer
-lr = 0.001 # 適当
-optim_Di  = optim.Adam(dis_i.parameters(), lr=lr)
-optim_Dv  = optim.Adam(dis_v.parameters(), lr=lr)
-optim_Gi  = optim.Adam(gen_i.parameters(), lr=lr)
-optim_GRU = optim.Adam(gru.parameters(),   lr=lr)
+lr = 0.0002
+betas=(0.5, 0.999)
+optim_Di  = optim.Adam(dis_i.parameters(), lr=lr, betas=betas)
+optim_Dv  = optim.Adam(dis_v.parameters(), lr=lr, betas=betas)
+optim_Gi  = optim.Adam(gen_i.parameters(), lr=lr, betas=betas)
+optim_GRU = optim.Adam(gru.parameters(),   lr=lr, betas=betas)
 
 
 ''' calc grad of models '''
 
 def bp_i(inputs, y, retain=False):
-    # val = 1 if img is true_data else 0
+    # y = 0.9 or 0 (one sided label smoothing). 0.9 is a guess
     dis_i.zero_grad()
     label.resize_(inputs.size(0)).fill_(y)
     labelv = Variable(label)
@@ -105,7 +155,6 @@ def bp_i(inputs, y, retain=False):
     return err.data[0]
 
 def bp_v(inputs, y, retain=False):
-    # val = 1 if video is true_data else 0
     dis_v.zero_grad()
     label.resize_(inputs.size(0)).fill_(y)
     labelv = Variable(label)
@@ -117,53 +166,62 @@ def bp_v(inputs, y, retain=False):
 
 ''' gen input noise for fake video '''
 
-def gen_z():
+def gen_z(n_frames):
     z_C = Variable(torch.randn(batch_size, d_C))
     #  repeat z_C to (batch_size, n_frames, d_C)
     z_C = z_C.unsqueeze(1).repeat(1, n_frames, 1)
     eps = Variable(torch.randn(n_frames, batch_size, d_E))
-    if gpu == True:
+    if cuda == True:
         z_C, eps = z_C.cuda(), eps.cuda()
 
     gru.initHidden(batch_size)
     # notice that 1st dim of gru outputs is seq_len, 2nd is batch_size
     z_M = gru(eps).transpose(1, 0)
-    z = torch.cat((z_M, z_C), 2)
-    # z.size() => (batch_size, n_frames, nz)
+    z = torch.cat((z_M, z_C), 2)  # z.size() => (batch_size, n_frames, nz)
     return z.view(batch_size, n_frames, nz, 1, 1)
 
 
 ''' train models '''
 
-n_iter = 100 # 適当
+n_iter = 250000
+start_time = time.time()
 
-for epoch in range(n_iter):
+for epoch in range(1, n_iter+1):
     ''' prepare real images '''
-    # real_video.size() => (batch_size, nc, n_frames, img_size, img_size)
-    real_video = random_choice()
-    if gpu == True:
-        real_video = real_video.cuda()
-    real_video = Variable(real_video)
-    real_img = real_video[:, :, np.random.randint(0, n_frames), :, :]
+    # real_videos.size() => (batch_size, nc, T, img_size, img_size)
+    real_videos = random_choice()
+    if cuda == True:
+        real_videos = real_videos.cuda()
+    real_videos = Variable(real_videos)
+    real_img = real_videos[:, :, np.random.randint(0, T), :, :]
 
     ''' prepare fake images '''
-    # Z.size() => (batch_size, n_frames, nz, 1, 1)
-    Z = gen_z()
-    # gen video for each sample
-    fake_video = [ gen_i(z) for z in Z ]
-    # change type to Variable(batch_size, n_frames, nc, img_size, img_size)
-    fake_video = torch.stack(fake_video)
-    # reshape => (batch_size, nc, n_frames, img_size, img_size)
-    fake_video = fake_video.transpose(2, 1)
-    fake_img = fake_video[:, :, np.random.randint(0, n_frames), :, :]
+    # note that n_frames is sampled from video length distribution
+    n_frames = video_lengths[np.random.randint(0, n_videos)]
+    Z = gen_z(n_frames)  # Z.size() => (batch_size, n_frames, nz, 1, 1)
+
+    # trim => (batch_size, T, nz, 1, 1)
+    Z = trim_noise(Z)
+
+    # generate videos
+    Z = Z.contiguous().view(batch_size*T, nz, 1, 1)
+    fake_videos = gen_i(Z)
+    fake_videos = fake_videos.view(batch_size, T, nc, img_size, img_size)
+
+    # reshape => (batch_size, nc, T, img_size, img_size)
+    fake_videos = fake_videos.transpose(2, 1)
+
+    # img sampling
+    fake_img = fake_videos[:, :, np.random.randint(0, T), :, :]
+
 
     ''' back prop for dis_v '''
-    err_Dv_real = bp_v(real_video, 1)
-    err_Dv_fake = bp_v(fake_video.detach(), 0) # detach(): avoid calc grad twice
+    err_Dv_real = bp_v(real_videos, 0.9)
+    err_Dv_fake = bp_v(fake_videos.detach(), 0) # detach(): avoid calc grad twice
     err_Dv = err_Dv_real + err_Dv_fake
 
     ''' back prop for dis_i '''
-    err_Di_real = bp_i(real_img, 1)
+    err_Di_real = bp_i(real_img, 0.9)
     err_Di_fake = bp_i(fake_img.detach(), 0)
     err_Di = err_Di_real + err_Di_fake
 
@@ -175,16 +233,25 @@ for epoch in range(n_iter):
     gen_i.zero_grad()
     gru.zero_grad()
     # calc grad using video. notice retain=True to back prop twice
-    err_Gv = bp_v(fake_video, 1, retain=True)
+    err_Gv = bp_v(fake_videos, 0.9, retain=True)
 
     ''' back prop for gen_i and gru using img '''
     # calc grad using images
-    err_Gi = bp_i(fake_img, 1)
+    err_Gi = bp_i(fake_img, 0.9)
 
     ''' train gen_i and gru '''
     optim_Gi.step()
     optim_GRU.step()
 
-    if (epoch+1) % 100 == 0:
-        print('[%d/%d] Loss_Di: %.4f Loss_Dv: %.4f Loss_Gi: %.4f Loss_Gv: %.4f'
-              % (epoch+1, n_iter, err_Di, err_Dv, err_Gi, err_Gv))
+    if epoch % 100 == 0:
+        print('[%d/%d] (%s) Loss_Di: %.4f Loss_Dv: %.4f Loss_Gi: %.4f Loss_Gv: %.4f'
+              % (epoch, n_iter, timeSince(start_time), err_Di, err_Dv, err_Gi, err_Gv))
+
+    if epoch % 1000 == 0:
+        checkpoint(dis_i, optim_Di, epoch)
+        checkpoint(dis_v, optim_Dv, epoch)
+        checkpoint(gen_i, optim_Gi, epoch)
+        checkpoint(gru,   optim_GRU, epoch)
+
+    if epoch % 1000 == 0:
+        save_video(fake_videos[0].data.cpu().numpy().transpose(1, 2, 3, 0), epoch)

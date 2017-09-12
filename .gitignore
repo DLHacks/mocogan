@@ -2,6 +2,9 @@
 /samples
 /.ipynb_checkpoints/
 /__pycache__/
-/raw_data/
-/resized_data/
+/raw_data/*
+/resized_data/*
+/trained_models/*
+/generated_videos/*
 /test.ipynb
+!.gitkeep
