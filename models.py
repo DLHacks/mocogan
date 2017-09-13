@@ -113,7 +113,7 @@ class Generator_I(nn.Module):
 
 
 class GRU(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, num_layers=1, dropout=0, gpu=True):
+    def __init__(self, input_size, hidden_size, output_size, num_layers=1, dropout=0.2, gpu=True):
         super(GRU, self).__init__()
 
         self._gpu        = gpu
@@ -121,9 +121,10 @@ class GRU(nn.Module):
         self.num_layers  = num_layers
 
         # 各layerの定義
-        self.gru = nn.GRU(input_size, hidden_size, num_layers=num_layers)
-        self.drop = nn.Dropout(p=dropout)
+        self.gru    = nn.GRU(input_size, hidden_size, num_layers=num_layers)
+        self.drop   = nn.Dropout(p=dropout)
         self.linear = nn.Linear(hidden_size, output_size)
+        self.bn     = nn.BatchNorm1d(output_size, affine=False)
 
     def forward(self, inputs):
         '''
@@ -132,7 +133,7 @@ class GRU(nn.Module):
         '''
         gru_out, self.hidden = self.gru(inputs, self.hidden)
         # 系列の要素ひとつずつに対して全結合を適用
-        outputs = [ self.linear(self.drop(elm)) for elm in gru_out ]
+        outputs = [ self.bn(self.linear(self.drop(elm))) for elm in gru_out ]
         outputs = torch.stack(outputs)
         return outputs
 
