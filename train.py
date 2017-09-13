@@ -14,7 +14,7 @@ from torch.autograd import Variable
 from models import Discriminator_I, Discriminator_V, Generator_I, GRU
 
 
-parser = argparse.ArgumentParser(description='Run hyperopt')
+parser = argparse.ArgumentParser(description='Start trainning MoCoGAN.....')
 parser.add_argument('--cuda', type=int, default=1,
                      help='set -1 when you use cpu')
 parser.add_argument('--ngpu', type=int, default=1,
@@ -87,12 +87,14 @@ hidden_size = 100 # guess
 d_C = 50
 d_M = 10
 nz  = d_C + d_M
-criterion = nn.BCELoss()
+# one sided label smoothing. 0.9 is a guess.
+criterion = nn.BCELoss(weight=0.9)
 
 dis_i = Discriminator_I(nc, ndf, ngpu=ngpu)
 dis_v = Discriminator_V(nc, ndf, T=T, ngpu=ngpu)
 gen_i = Generator_I(nc, ngf, nz, ngpu=ngpu)
 gru = GRU(d_E, hidden_size, d_M, gpu=cuda)
+gru.initWeight()
 
 
 ''' prepare for train '''
@@ -145,7 +147,6 @@ optim_GRU = optim.Adam(gru.parameters(),   lr=lr, betas=betas)
 ''' calc grad of models '''
 
 def bp_i(inputs, y, retain=False):
-    # y = 0.9 or 0 (one sided label smoothing). 0.9 is a guess
     dis_i.zero_grad()
     label.resize_(inputs.size(0)).fill_(y)
     labelv = Variable(label)
@@ -208,7 +209,7 @@ for epoch in range(1, n_iter+1):
     fake_videos = gen_i(Z)
     fake_videos = fake_videos.view(batch_size, T, nc, img_size, img_size)
 
-    # reshape => (batch_size, nc, T, img_size, img_size)
+    # transpose => (batch_size, nc, T, img_size, img_size)
     fake_videos = fake_videos.transpose(2, 1)
 
     # img sampling
@@ -216,12 +217,12 @@ for epoch in range(1, n_iter+1):
 
 
     ''' back prop for dis_v '''
-    err_Dv_real = bp_v(real_videos, 0.9)
+    err_Dv_real = bp_v(real_videos, 1)
     err_Dv_fake = bp_v(fake_videos.detach(), 0) # detach(): avoid calc grad twice
     err_Dv = err_Dv_real + err_Dv_fake
 
     ''' back prop for dis_i '''
-    err_Di_real = bp_i(real_img, 0.9)
+    err_Di_real = bp_i(real_img, 1)
     err_Di_fake = bp_i(fake_img.detach(), 0)
     err_Di = err_Di_real + err_Di_fake
 
@@ -229,15 +230,14 @@ for epoch in range(1, n_iter+1):
     optim_Di.step()
     optim_Dv.step()
 
-    ''' back prop for gen_i and gru using video '''
+    ''' back prop for gen_i and gru '''
     gen_i.zero_grad()
     gru.zero_grad()
-    # calc grad using video. notice retain=True to back prop twice
-    err_Gv = bp_v(fake_videos, 0.9, retain=True)
-
-    ''' back prop for gen_i and gru using img '''
+    # calc grad using video. notice retain=True for back prop twice
+    if epoch % 5 == 0:
+        err_Gv = bp_v(fake_videos, 1, retain=True)
     # calc grad using images
-    err_Gi = bp_i(fake_img, 0.9)
+    err_Gi = bp_i(fake_img, 1)
 
     ''' train gen_i and gru '''
     optim_Gi.step()
