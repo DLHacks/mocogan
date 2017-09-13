@@ -200,52 +200,46 @@ for epoch in range(1, n_iter+1):
     # note that n_frames is sampled from video length distribution
     n_frames = video_lengths[np.random.randint(0, n_videos)]
     Z = gen_z(n_frames)  # Z.size() => (batch_size, n_frames, nz, 1, 1)
-
     # trim => (batch_size, T, nz, 1, 1)
     Z = trim_noise(Z)
-
     # generate videos
     Z = Z.contiguous().view(batch_size*T, nz, 1, 1)
     fake_videos = gen_i(Z)
     fake_videos = fake_videos.view(batch_size, T, nc, img_size, img_size)
-
     # transpose => (batch_size, nc, T, img_size, img_size)
     fake_videos = fake_videos.transpose(2, 1)
-
     # img sampling
     fake_img = fake_videos[:, :, np.random.randint(0, T), :, :]
 
-
-    ''' back prop for dis_v '''
-    err_Dv_real = bp_v(real_videos, 1)
-    err_Dv_fake = bp_v(fake_videos.detach(), 0) # detach(): avoid calc grad twice
-    err_Dv = err_Dv_real + err_Dv_fake
-
-    ''' back prop for dis_i '''
-    err_Di_real = bp_i(real_img, 1)
-    err_Di_fake = bp_i(fake_img.detach(), 0)
-    err_Di = err_Di_real + err_Di_fake
-
     ''' train discriminators '''
-    optim_Di.step()
-    optim_Dv.step()
+    if epoch % 4 == 0:
+        err_Di_real, Di_real_mean = bp_i(real_img, 1)
+        err_Dv_real, Dv_real_mean = bp_v(real_videos, 1)
+        # I empirically found that D needs more real data than fake ones in the early trainning stage.
+        # Maybe the difficulity in learning real data is not equal to that in learning fake ones(noise).
+        if epoch > 10000 or epoch % 8 == 0:
+            err_Di_fake, Di_fake_mean = bp_i(fake_img.detach(), 0)
+            err_Dv_fake, Dv_fake_mean = bp_v(fake_videos.detach(), 0)
+        else:
+            err_Di_fake, Di_fake_mean, err_Dv_fake, Dv_fake_mean = 0, 0, 0, 0
+        err_Di = err_Di_real + err_Di_fake
+        err_Dv = err_Dv_real + err_Dv_fake
+        optim_Di.step()
+        optim_Dv.step()
 
-    ''' back prop for gen_i and gru '''
+    ''' train generators '''
     gen_i.zero_grad()
     gru.zero_grad()
     # calc grad using video. notice retain=True for back prop twice
-    if epoch % 5 == 0:
-        err_Gv = bp_v(fake_videos, 1, retain=True)
+    err_Gv, _ = bp_v(fake_videos, 1, retain=True)
     # calc grad using images
-    err_Gi = bp_i(fake_img, 1)
-
-    ''' train gen_i and gru '''
+    err_Gi, _ = bp_i(fake_img, 1)
     optim_Gi.step()
     optim_GRU.step()
 
-    if epoch % 100 == 0:
-        print('[%d/%d] (%s) Loss_Di: %.4f Loss_Dv: %.4f Loss_Gi: %.4f Loss_Gv: %.4f'
-              % (epoch, n_iter, timeSince(start_time), err_Di, err_Dv, err_Gi, err_Gv))
+    if epoch % 200 == 0:
+        print('[%d/%d] (%s) Loss_Di: %.4f Loss_Dv: %.4f Loss_Gi: %.4f Loss_Gv: %.4f Dv_real_mean %.4f Dv_fake_mean %.4f Di_real_mean %.4f Di_fake_mean %.4f'
+              % (epoch, n_iter, timeSince(start_time), err_Di, err_Dv, err_Gi, err_Gv, Dv_real_mean, Dv_fake_mean, Di_real_mean, Di_fake_mean))
 
     if epoch % 1000 == 0:
         checkpoint(dis_i, optim_Di, epoch)
