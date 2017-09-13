@@ -88,7 +88,7 @@ d_C = 50
 d_M = 10
 nz  = d_C + d_M
 # one sided label smoothing. 0.9 is a guess.
-criterion = nn.BCELoss(weight=0.9)
+criterion = nn.BCELoss(weight=torch.Tensor(1).fill_(0.9))
 
 dis_i = Discriminator_I(nc, ndf, ngpu=ngpu)
 dis_v = Discriminator_V(nc, ndf, T=T, ngpu=ngpu)
@@ -153,7 +153,7 @@ def bp_i(inputs, y, retain=False):
     outputs = dis_i(inputs)
     err = criterion(outputs, labelv)
     err.backward(retain_graph=retain)
-    return err.data[0]
+    return err.data[0], outputs.data.mean()
 
 def bp_v(inputs, y, retain=False):
     dis_v.zero_grad()
@@ -162,7 +162,7 @@ def bp_v(inputs, y, retain=False):
     outputs = dis_v(inputs)
     err = criterion(outputs, labelv)
     err.backward(retain_graph=retain)
-    return err.data[0]
+    return err.data[0], outputs.data.mean()
 
 
 ''' gen input noise for fake video '''
