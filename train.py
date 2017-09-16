@@ -88,7 +88,7 @@ d_C = 50
 d_M = 10
 nz  = d_C + d_M
 # one sided label smoothing. 0.9 is a guess.
-criterion = nn.BCELoss(weight=torch.Tensor(1).fill_(0.9))
+criterion = nn.BCELoss()
 
 dis_i = Discriminator_I(nc, ndf, ngpu=ngpu)
 dis_v = Discriminator_V(nc, ndf, T=T, ngpu=ngpu)
@@ -212,12 +212,12 @@ for epoch in range(1, n_iter+1):
     fake_img = fake_videos[:, :, np.random.randint(0, T), :, :]
 
     ''' train discriminators '''
-    if epoch % 4 == 0:
-        err_Di_real, Di_real_mean = bp_i(real_img, 1)
-        err_Dv_real, Dv_real_mean = bp_v(real_videos, 1)
+    if epoch % 10 == 0:
+        err_Di_real, Di_real_mean = bp_i(real_img, 0.9)
+        err_Dv_real, Dv_real_mean = bp_v(real_videos, 0.9)
         # I empirically found that D needs more real data than fake ones in the early trainning stage.
         # Maybe the difficulity in learning real data is not equal to that in learning fake ones(noise).
-        if epoch > 10000 or epoch % 8 == 0:
+        if epoch > 200000 or epoch % 20 == 0:
             err_Di_fake, Di_fake_mean = bp_i(fake_img.detach(), 0)
             err_Dv_fake, Dv_fake_mean = bp_v(fake_videos.detach(), 0)
         else:
@@ -231,21 +231,22 @@ for epoch in range(1, n_iter+1):
     gen_i.zero_grad()
     gru.zero_grad()
     # calc grad using video. notice retain=True for back prop twice
-    err_Gv, _ = bp_v(fake_videos, 1, retain=True)
+    err_Gv, _ = bp_v(fake_videos, 0.9, retain=True)
     # calc grad using images
-    err_Gi, _ = bp_i(fake_img, 1)
+    err_Gi, _ = bp_i(fake_img, 0.9)
     optim_Gi.step()
     optim_GRU.step()
 
-    if epoch % 200 == 0:
+    if epoch % 100 == 0:
         print('[%d/%d] (%s) Loss_Di: %.4f Loss_Dv: %.4f Loss_Gi: %.4f Loss_Gv: %.4f Dv_real_mean %.4f Dv_fake_mean %.4f Di_real_mean %.4f Di_fake_mean %.4f'
               % (epoch, n_iter, timeSince(start_time), err_Di, err_Dv, err_Gi, err_Gv, Dv_real_mean, Dv_fake_mean, Di_real_mean, Di_fake_mean))
 
     if epoch % 1000 == 0:
+        save_video(fake_videos[0].data.cpu().numpy().transpose(1, 2, 3, 0), epoch)
+
+    if epoch % 5000 == 0:
         checkpoint(dis_i, optim_Di, epoch)
         checkpoint(dis_v, optim_Dv, epoch)
         checkpoint(gen_i, optim_Gi, epoch)
         checkpoint(gru,   optim_GRU, epoch)
 
-    if epoch % 1000 == 0:
-        save_video(fake_videos[0].data.cpu().numpy().transpose(1, 2, 3, 0), epoch)
