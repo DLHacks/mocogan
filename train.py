@@ -147,7 +147,6 @@ optim_GRU = optim.Adam(gru.parameters(),   lr=lr, betas=betas)
 ''' calc grad of models '''
 
 def bp_i(inputs, y, retain=False):
-    dis_i.zero_grad()
     label.resize_(inputs.size(0)).fill_(y)
     labelv = Variable(label)
     outputs = dis_i(inputs)
@@ -156,7 +155,6 @@ def bp_i(inputs, y, retain=False):
     return err.data[0], outputs.data.mean()
 
 def bp_v(inputs, y, retain=False):
-    dis_v.zero_grad()
     label.resize_(inputs.size(0)).fill_(y)
     labelv = Variable(label)
     outputs = dis_v(inputs)
@@ -212,27 +210,25 @@ for epoch in range(1, n_iter+1):
     fake_img = fake_videos[:, :, np.random.randint(0, T), :, :]
 
     ''' train discriminators '''
-    if epoch % 10 == 0:
-        err_Di_real, Di_real_mean = bp_i(real_img, 0.9)
-        err_Dv_real, Dv_real_mean = bp_v(real_videos, 0.9)
-        # I empirically found that D needs more real data than fake ones in the early trainning stage.
-        # Maybe the difficulity in learning real data is not equal to that in learning fake ones(noise).
-        if epoch > 200000 or epoch % 20 == 0:
-            err_Di_fake, Di_fake_mean = bp_i(fake_img.detach(), 0)
-            err_Dv_fake, Dv_fake_mean = bp_v(fake_videos.detach(), 0)
-        else:
-            err_Di_fake, Di_fake_mean, err_Dv_fake, Dv_fake_mean = 0, 0, 0, 0
-        err_Di = err_Di_real + err_Di_fake
-        err_Dv = err_Dv_real + err_Dv_fake
-        optim_Di.step()
-        optim_Dv.step()
+    # image
+    dis_i.zero_grad()
+    err_Di_real, Di_real_mean = bp_i(real_img, 0.9)
+    err_Di_fake, Di_fake_mean = bp_i(fake_img.detach(), 0)
+    err_Di = err_Di_real + err_Di_fake
+    optim_Di.step()
+    # video
+    dis_v.zero_grad()
+    err_Dv_real, Dv_real_mean = bp_v(real_videos, 0.9)
+    err_Dv_fake, Dv_fake_mean = bp_v(fake_videos.detach(), 0)
+    err_Dv = err_Dv_real + err_Dv_fake
+    optim_Dv.step()
 
     ''' train generators '''
     gen_i.zero_grad()
     gru.zero_grad()
     # calc grad using video. notice retain=True for back prop twice
     err_Gv, _ = bp_v(fake_videos, 0.9, retain=True)
-    # calc grad using images
+    # images
     err_Gi, _ = bp_i(fake_img, 0.9)
     optim_Gi.step()
     optim_GRU.step()
@@ -244,9 +240,8 @@ for epoch in range(1, n_iter+1):
     if epoch % 1000 == 0:
         save_video(fake_videos[0].data.cpu().numpy().transpose(1, 2, 3, 0), epoch)
 
-    if epoch % 5000 == 0:
+    if epoch % 10000 == 0:
         checkpoint(dis_i, optim_Di, epoch)
         checkpoint(dis_v, optim_Dv, epoch)
         checkpoint(gen_i, optim_Gi, epoch)
         checkpoint(gru,   optim_GRU, epoch)
-
