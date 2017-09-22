@@ -93,7 +93,6 @@ hidden_size = 100 # guess
 d_C = 50
 d_M = 10
 nz  = d_C + d_M
-# one sided label smoothing. 0.9 is a guess.
 criterion = nn.BCELoss()
 
 dis_i = Discriminator_I(nc, ndf, ngpu=ngpu)
