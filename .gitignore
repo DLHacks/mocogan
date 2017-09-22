@@ -8,3 +8,4 @@
 /generated_videos/*
 /test.ipynb
 !.gitkeep
+/sandbox
