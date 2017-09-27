@@ -88,17 +88,17 @@ img_size = 96
 nc = 3
 ndf = 64 # from dcgan
 ngf = 64
-d_E = 100 # guess
+d_E = 10
 hidden_size = 100 # guess
 d_C = 50
-d_M = 10
+d_M = d_E
 nz  = d_C + d_M
 criterion = nn.BCELoss()
 
 dis_i = Discriminator_I(nc, ndf, ngpu=ngpu)
 dis_v = Discriminator_V(nc, ndf, T=T, ngpu=ngpu)
 gen_i = Generator_I(nc, ngf, nz, ngpu=ngpu)
-gru = GRU(d_E, hidden_size, d_M, gpu=cuda)
+gru = GRU(d_E, hidden_size, gpu=cuda)
 gru.initWeight()
 
 
@@ -187,13 +187,13 @@ def gen_z(n_frames):
     z_C = Variable(torch.randn(batch_size, d_C))
     #  repeat z_C to (batch_size, n_frames, d_C)
     z_C = z_C.unsqueeze(1).repeat(1, n_frames, 1)
-    eps = Variable(torch.randn(n_frames, batch_size, d_E))
+    eps = Variable(torch.randn(batch_size, d_E))
     if cuda == True:
         z_C, eps = z_C.cuda(), eps.cuda()
 
     gru.initHidden(batch_size)
     # notice that 1st dim of gru outputs is seq_len, 2nd is batch_size
-    z_M = gru(eps).transpose(1, 0)
+    z_M = gru(eps, n_frames).transpose(1, 0)
     z = torch.cat((z_M, z_C), 2)  # z.size() => (batch_size, n_frames, nz)
     return z.view(batch_size, n_frames, nz, 1, 1)
 
