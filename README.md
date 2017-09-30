@@ -13,7 +13,7 @@
 ## Implemention
 
 - you need to place datasets([run, walk, skip, ......]) [here](http://www.wisdom.weizmann.ac.il/%7Evision/SpaceTimeActions.html)  under 'raw_data' dir.
-- `python resize.py`: resize your raw data as 96x96 and place them under the resized_data dir. This command requires ffmpeg
+- `python resize.py`: resize your raw data as 96x96 and place them under resized_data dir..
 - `python train.py`: train MoCoGAN.
 
 
@@ -23,7 +23,7 @@
 - pytorch 0.2
 - numpy
 - skvideo
-- ffmgeg (for preprocessing)
+- ffmgeg (for preprocessing and saving videos)
 
 
 ## References

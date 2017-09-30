@@ -21,8 +21,8 @@ parser.add_argument('--ngpu', type=int, default=1,
                      help='set the number of gpu you use')
 parser.add_argument('--batch-size', type=int, default=16,
                      help='set batch_size, default: 16')
-parser.add_argument('--niter', type=int, default=500000,
-                     help='set num of iterations, default: 500000')
+parser.add_argument('--niter', type=int, default=120000,
+                     help='set num of iterations, default: 120000')
 parser.add_argument('--pre-train', type=int, default=-1,
                      help='set 1 when you use pre-trained models')
 
