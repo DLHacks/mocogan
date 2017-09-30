@@ -6,7 +6,7 @@ from torch.autograd import Variable
 import torch.nn.init as init
 
 
-# Ref: _netD in https://github.com/pytorch/examples/blob/master/dcgan/main.py
+# see: _netD in https://github.com/pytorch/examples/blob/master/dcgan/main.py
 class Discriminator_I(nn.Module):
     def __init__(self, nc=3, ndf=64, ngpu=1):
         super(Discriminator_I, self).__init__()
@@ -76,7 +76,7 @@ class Discriminator_V(nn.Module):
         return output.view(-1, 1).squeeze(1)
 
 
-# Ref: _netG in https://github.com/pytorch/examples/blob/master/dcgan/main.py
+# see: _netG in https://github.com/pytorch/examples/blob/master/dcgan/main.py
 class Generator_I(nn.Module):
     def __init__(self, nc=3, ngf=64, nz=60, ngpu=1):
         super(Generator_I, self).__init__()
@@ -160,7 +160,6 @@ class GRU(nn.Module):
         self.hidden = Variable(torch.zeros(batch_size, self.hidden_size))
         if self._gpu == True:
             self.hidden = self.hidden.cuda()
-
 
 
 ''' utils '''
