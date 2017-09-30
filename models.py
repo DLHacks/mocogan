@@ -6,7 +6,7 @@ from torch.autograd import Variable
 import torch.nn.init as init
 
 
-# Ref: _netD in https://github.com/pytorch/examples/blob/master/dcgan/main.py
+# see: _netD in https://github.com/pytorch/examples/blob/master/dcgan/main.py
 class Discriminator_I(nn.Module):
     def __init__(self, nc=3, ndf=64, ngpu=1):
         super(Discriminator_I, self).__init__()
@@ -76,7 +76,7 @@ class Discriminator_V(nn.Module):
         return output.view(-1, 1).squeeze(1)
 
 
-# Ref: _netG in https://github.com/pytorch/examples/blob/master/dcgan/main.py
+# see: _netG in https://github.com/pytorch/examples/blob/master/dcgan/main.py
 class Generator_I(nn.Module):
     def __init__(self, nc=3, ngf=64, nz=60, ngpu=1):
         super(Generator_I, self).__init__()
@@ -113,52 +113,51 @@ class Generator_I(nn.Module):
 
 
 class GRU(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size, num_layers=1, dropout=0.2, gpu=True):
+    def __init__(self, input_size, hidden_size, dropout=0, gpu=True):
         super(GRU, self).__init__()
 
+        output_size      = input_size
         self._gpu        = gpu
         self.hidden_size = hidden_size
-        self.num_layers  = num_layers
 
-        # 各layerの定義
-        self.gru    = nn.GRU(input_size, hidden_size, num_layers=num_layers)
+        # define layers
+        self.gru    = nn.GRUCell(input_size, hidden_size)
         self.drop   = nn.Dropout(p=dropout)
         self.linear = nn.Linear(hidden_size, output_size)
         self.bn     = nn.BatchNorm1d(output_size, affine=False)
 
-    def forward(self, inputs):
+    def forward(self, inputs, n_frames):
         '''
-        gru_out.shape() => (seq_len, batch, hidden_size)
-        outputs.shape() => (seq_len, batch, output_size)
+        inputs.shape()   => (batch_size, input_size)
+        outputs.shape() => (seq_len, batch_size, output_size)
         '''
-        gru_out, self.hidden = self.gru(inputs, self.hidden)
-        # 系列の要素ひとつずつに対して全結合を適用
-        outputs = [ self.bn(self.linear(self.drop(elm))) for elm in gru_out ]
+        outputs = []
+        for i in range(n_frames):
+            self.hidden = self.gru(inputs, self.hidden)
+            inputs = self.linear(self.hidden)
+            outputs.append(inputs)
+        outputs = [ self.bn(elm) for elm in outputs ]
         outputs = torch.stack(outputs)
         return outputs
 
     def initWeight(self, init_forget_bias=1):
         # See details in https://github.com/pytorch/pytorch/blob/master/torch/nn/modules/rnn.py
         for name, params in self.named_parameters():
-            # weightをxavierで初期化
             if 'weight' in name:
                 init.xavier_uniform(params)
 
-            # 忘却しやすくなるようGRUのb_iz, b_hzを初期化
+            # initialize forget gate bias
             elif 'gru.bias_ih_l' in name:
                 b_ir, b_iz, b_in = params.chunk(3, 0)
                 init.constant(b_iz, init_forget_bias)
             elif 'gru.bias_hh_l' in name:
                 b_hr, b_hz, b_hn = params.chunk(3, 0)
                 init.constant(b_hz, init_forget_bias)
-
-            # それ以外のbiasを0に初期化
             else:
                 init.constant(params, 0)
 
     def initHidden(self, batch_size):
-        self.hidden = Variable(torch.zeros(self.num_layers,
-                      batch_size, self.hidden_size))
+        self.hidden = Variable(torch.zeros(batch_size, self.hidden_size))
         if self._gpu == True:
             self.hidden = self.hidden.cuda()
 
