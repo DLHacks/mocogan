@@ -9,3 +9,11 @@
 /test.ipynb
 !.gitkeep
 /sandbox
+!/trained_models/Discriminator_I_epoch-120000.model
+!/trained_models/Discriminator_I_epoch-120000.state
+!/trained_models/Discriminator_V_epoch-120000.model
+!/trained_models/Discriminator_V_epoch-120000.state
+!/trained_models/Generator_I_epoch-120000.model
+!/trained_models/Generator_I_epoch-120000.state
+!/trained_models/GRU_epoch-120000.model
+!/trained_models/GRU_epoch-120000.state
