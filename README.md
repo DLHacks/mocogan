@@ -17,6 +17,12 @@
 - `python train.py`: train MoCoGAN.
 
 
+## Results
+| | | | |
+|:---|:---|:---|:---|
+|![img](https://github.com/DLHacks/mocogan/blob/media/gif/fakeVideo_epoch-2.gif) | ![img](https://github.com/DLHacks/mocogan/blob/media/gif/fakeVideo_epoch-3.gif) | ![img](https://github.com/DLHacks/mocogan/blob/media/gif/fakeVideo_epoch-4.gif) | ![img](https://github.com/DLHacks/mocogan/blob/media/gif/fakeVideo_epoch-6.gif) |
+
+
 ## Requirements
 
 - python 3.5
